@@ -2,8 +2,22 @@ import { AMBULANCE_DEPOTS, distanceKm } from "./hospitals";
 import { useStore } from "./store";
 import type { EmergencyCase, Hospital, TriageResult, Severity, BackendEmergencyResponse } from "./types";
 
-function buildRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }): Array<[number, number]> {
-  // Simple multi-waypoint path with slight jitter to look like routed road
+async function buildRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }): Promise<{ route: Array<[number, number]>; durationSec: number }> {
+  try {
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0) {
+        const route = data.routes[0].geometry.coordinates.map((coord: [number, number]) => [coord[1], coord[0]]);
+        const durationSec = data.routes[0].duration || 0;
+        return { route, durationSec };
+      }
+    }
+  } catch (err) {
+    console.error("OSRM routing failed, falling back to straight line", err);
+  }
+
+  // Fallback: Simple multi-waypoint path with slight jitter to look like routed road
   const steps = 40;
   const pts: Array<[number, number]> = [];
   for (let i = 0; i <= steps; i++) {
@@ -13,7 +27,12 @@ function buildRoute(from: { lat: number; lng: number }, to: { lat: number; lng: 
     const jitter = Math.sin(t * Math.PI * 3) * 0.0015;
     pts.push([lat + jitter, lng - jitter * 0.7]);
   }
-  return pts;
+  
+  // Calculate fallback duration based on distance (assuming speed is 58 km/h)
+  const distance = distanceKm(from, to);
+  const durationSec = Math.round((distance / 58) * 3600);
+  
+  return { route: pts, durationSec };
 }
 
 export async function dispatchPipeline(caseId: string, backendRes: BackendEmergencyResponse) {
@@ -72,8 +91,8 @@ export async function dispatchPipeline(caseId: string, backendRes: BackendEmerge
     lng: c.location.lng + (Math.random() - 0.5) * 0.05,
   };
 
-  const route = buildRoute({ lat: depot.lat, lng: depot.lng }, c.location);
-  const etaMin = Math.round(backendRes.eta_minutes) || Math.max(4, Math.round(distanceKm(depot, c.location) * 2.4));
+  const { route, durationSec } = await buildRoute({ lat: depot.lat, lng: depot.lng }, c.location);
+  const etaMin = Math.round(durationSec / 60) || Math.round(backendRes.eta_minutes) || Math.max(4, Math.round(distanceKm(depot, c.location) * 2.4));
   store.updateCase(caseId, {
     ambulance: {
       id: depot.id,
@@ -81,6 +100,7 @@ export async function dispatchPipeline(caseId: string, backendRes: BackendEmerge
       lat: depot.lat,
       lng: depot.lng,
       etaMin,
+      initialEtaMin: etaMin,
       speedKmh: 58,
     },
     route,
@@ -143,7 +163,11 @@ export function startAmbulanceSimulation(caseId: string) {
     const progress = Math.min(1, (c.routeProgress ?? 0) + 0.018);
     const idx = Math.floor(progress * (c.route.length - 1));
     const [lat, lng] = c.route[idx];
-    const remaining = Math.max(0, Math.round(c.ambulance.etaMin * (1 - progress)));
+    
+    // Calculate remaining ETA based on the initial ETA linearly, not exponentially decaying
+    const initialEta = c.ambulance.initialEtaMin ?? c.ambulance.etaMin;
+    const remaining = Math.max(0, Math.round(initialEta * (1 - progress)));
+    
     useStore.getState().updateCase(caseId, {
       routeProgress: progress,
       ambulance: { ...c.ambulance, lat, lng, etaMin: remaining },

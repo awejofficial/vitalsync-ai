@@ -50,6 +50,7 @@ export interface EmergencyCase {
     lat: number;
     lng: number;
     etaMin: number;
+    initialEtaMin?: number;
     speedKmh: number;
   };
   route?: Array<[number, number]>;

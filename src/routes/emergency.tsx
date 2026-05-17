@@ -77,11 +77,31 @@ function EmergencyPage() {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
           setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            label: "Current Location",
+            lat,
+            lng,
+            label: "Fetching address…",
           });
+
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`, {
+            headers: {
+              "User-Agent": "MediRelay/1.0"
+            }
+          })
+            .then((res) => {
+              if (res.ok) return res.json();
+              throw new Error("Nominatim error");
+            })
+            .then((data) => {
+              const label = data.display_name ? data.display_name.split(",").slice(0, 3).join(",") : "Current Location";
+              setUserLocation({ lat, lng, label });
+            })
+            .catch(() => {
+              setUserLocation({ lat, lng, label: "Current Location" });
+            });
         },
         (error) => {
           console.warn("Geolocation failed:", error);
