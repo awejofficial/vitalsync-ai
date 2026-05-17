@@ -64,10 +64,13 @@ export async function dispatchPipeline(caseId: string, backendRes: BackendEmerge
 
   await wait(700);
 
-  // 3. Ambulance assignment — nearest depot
-  const depot = AMBULANCE_DEPOTS
-    .map((d) => ({ d, dist: distanceKm(d, c.location) }))
-    .sort((a, b) => a.dist - b.dist)[0].d;
+  // 3. Ambulance assignment — dynamic depot near patient
+  const depot = {
+    id: `dynamic-${Math.floor(Math.random() * 1000)}`,
+    callsign: `RELAY-${Math.floor(Math.random() * 90) + 10}`,
+    lat: c.location.lat + (Math.random() - 0.5) * 0.05,
+    lng: c.location.lng + (Math.random() - 0.5) * 0.05,
+  };
 
   const route = buildRoute({ lat: depot.lat, lng: depot.lng }, c.location);
   const etaMin = Math.round(backendRes.eta_minutes) || Math.max(4, Math.round(distanceKm(depot, c.location) * 2.4));
