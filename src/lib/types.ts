@@ -64,3 +64,19 @@ export interface AgentLogEntry {
   message: string;
   level?: "info" | "success" | "warn" | "critical";
 }
+
+export interface BackendEmergencyResponse {
+  severity_level: Severity | string;
+  suspected_condition: string;
+  required_specialist: string;
+  selected_hospital: {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    rating: number | string;
+  };
+  eta_minutes: number;
+  route_details: string;
+  doctor_brief: string;
+}

@@ -1,28 +1,6 @@
-import { HOSPITALS, AMBULANCE_DEPOTS, distanceKm } from "./hospitals";
+import { AMBULANCE_DEPOTS, distanceKm } from "./hospitals";
 import { useStore } from "./store";
-import type { EmergencyCase, Hospital, TriageResult } from "./types";
-
-function pickHospital(patient: { lat: number; lng: number }, triage: TriageResult): Hospital {
-  const candidates = HOSPITALS
-    .map((h) => {
-      const dist = distanceKm(patient, h);
-      const specialistMatch = h.specialists.some((s) =>
-        s.toLowerCase().includes(triage.specialist.toLowerCase().split(" ")[0])
-      );
-      const icuOk = triage.severity === "CRITICAL" ? h.icuBeds > 0 : true;
-      const capacityOk = h.emergencyBeds > 0;
-      let score = 0;
-      score -= dist * 2; // closer is better
-      if (specialistMatch) score += 15;
-      if (icuOk) score += 10;
-      if (capacityOk) score += 5;
-      score += h.rating * 2;
-      return { h, score, dist, specialistMatch, icuOk, capacityOk };
-    })
-    .filter((c) => c.capacityOk)
-    .sort((a, b) => b.score - a.score);
-  return (candidates[0]?.h) ?? HOSPITALS[0];
-}
+import type { EmergencyCase, Hospital, TriageResult, Severity, BackendEmergencyResponse } from "./types";
 
 function buildRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }): Array<[number, number]> {
   // Simple multi-waypoint path with slight jitter to look like routed road
@@ -38,29 +16,49 @@ function buildRoute(from: { lat: number; lng: number }, to: { lat: number; lng: 
   return pts;
 }
 
-export async function dispatchPipeline(caseId: string, triage: TriageResult) {
+export async function dispatchPipeline(caseId: string, backendRes: BackendEmergencyResponse) {
   const store = useStore.getState();
   const c = store.cases[caseId];
   if (!c) return;
 
   // 1. Triage completed
+  const triage: TriageResult = {
+    severity: (backendRes.severity_level || "URGENT") as Severity,
+    condition: backendRes.suspected_condition,
+    specialist: backendRes.required_specialist,
+    timeSensitivityMin: 30,
+    requiredEquipment: [],
+    preparationSteps: [],
+    reasoning: "Triage via Backend LangGraph",
+  };
+
   store.updateCase(caseId, { triage, status: "TRIAGE_COMPLETED" });
   store.pushLog(caseId, {
     ts: Date.now(),
     agent: "TRIAGE",
     level: triage.severity === "CRITICAL" ? "critical" : "info",
-    message: `Severity ${triage.severity} — ${triage.condition}. Needs ${triage.specialist}. < ${triage.timeSensitivityMin} min window.`,
+    message: `Severity ${triage.severity} — ${triage.condition}. Needs ${triage.specialist}.`,
   });
 
   await wait(700);
 
   // 2. Hospital finder
-  const hospital = pickHospital(c.location, triage);
+  const hospital: Hospital = {
+    id: backendRes.selected_hospital.id || "1",
+    name: backendRes.selected_hospital.name,
+    lat: backendRes.selected_hospital.lat,
+    lng: backendRes.selected_hospital.lng,
+    icuBeds: 5, // Mock data since backend doesn't return capacity yet
+    emergencyBeds: 10,
+    specialists: [backendRes.required_specialist],
+    rating: Number(backendRes.selected_hospital.rating) || 4.0,
+  };
+
   store.pushLog(caseId, {
     ts: Date.now(),
     agent: "HOSPITAL",
     level: "success",
-    message: `Matched ${hospital.name} — ${hospital.icuBeds} ICU beds, ${hospital.emergencyBeds} ER beds available.`,
+    message: `Matched ${hospital.name} — Rating: ${hospital.rating}.`,
   });
   store.updateCase(caseId, { hospital, status: "HOSPITAL_ASSIGNED" });
 
@@ -72,7 +70,7 @@ export async function dispatchPipeline(caseId: string, triage: TriageResult) {
     .sort((a, b) => a.dist - b.dist)[0].d;
 
   const route = buildRoute({ lat: depot.lat, lng: depot.lng }, c.location);
-  const etaMin = Math.max(4, Math.round(distanceKm(depot, c.location) * 2.4));
+  const etaMin = Math.round(backendRes.eta_minutes) || Math.max(4, Math.round(distanceKm(depot, c.location) * 2.4));
   store.updateCase(caseId, {
     ambulance: {
       id: depot.id,
@@ -90,7 +88,7 @@ export async function dispatchPipeline(caseId: string, triage: TriageResult) {
     ts: Date.now(),
     agent: "AMBULANCE",
     level: "info",
-    message: `${depot.callsign} dispatched. ETA ${etaMin} min. Route optimized, traffic-aware.`,
+    message: `${depot.callsign} dispatched. ETA ${etaMin} min. ${backendRes.route_details || "Route optimized."}`,
   });
 
   await wait(700);
@@ -104,7 +102,7 @@ export async function dispatchPipeline(caseId: string, triage: TriageResult) {
     ts: Date.now(),
     agent: "DOCTOR",
     level: "success",
-    message: `${hospital.name} ${triage.specialist} alerted. Prep: ${triage.preparationSteps.slice(0, 2).join(", ")}.`,
+    message: `Doctor Brief: ${backendRes.doctor_brief}`,
   });
 
   await wait(500);

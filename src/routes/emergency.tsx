@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { TopNav } from "@/components/TopNav";
 import { StoreHydrator } from "@/components/StoreHydrator";
@@ -67,6 +67,29 @@ function EmergencyPage() {
     symptoms: "",
   });
 
+  const [userLocation, setUserLocation] = useState({
+    lat: 12.9550,
+    lng: 77.6100,
+    label: "Bengaluru", // Fallback
+  });
+
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            label: "Current Location",
+          });
+        },
+        (error) => {
+          console.warn("Geolocation failed:", error);
+        }
+      );
+    }
+  }, []);
+
   function loadScenario(s: typeof SCENARIOS[number]) {
     setForm({
       name: s.name,
@@ -93,12 +116,7 @@ function EmergencyPage() {
         medicalHistory: form.history,
       },
       symptoms: form.symptoms,
-      // Random-ish patient location around Bengaluru
-      location: {
-        lat: 12.9550 + (Math.random() - 0.5) * 0.04,
-        lng: 77.6100 + (Math.random() - 0.5) * 0.04,
-        label: "Bengaluru",
-      },
+      location: userLocation,
       status: "CASE_CREATED",
       agentLog: [
         { ts: Date.now(), agent: "SYSTEM", message: `Case ${id} created. Dispatching triage agent…`, level: "info" },
@@ -113,6 +131,8 @@ function EmergencyPage() {
           age: caseData.patient.age,
           gender: form.gender,
           medicalHistory: form.history,
+          patient_lat: caseData.location.lat,
+          patient_lng: caseData.location.lng,
         },
       });
       // Kick off the rest of the pipeline (fire-and-forget)
