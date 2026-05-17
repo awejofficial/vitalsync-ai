@@ -68,9 +68,9 @@ function EmergencyPage() {
   });
 
   const [userLocation, setUserLocation] = useState({
-    lat: 12.9550,
-    lng: 77.6100,
-    label: "Bengaluru", // Fallback
+    lat: 16.9902,
+    lng: 73.3120,
+    label: "Ratnagiri", // Fallback
   });
 
   useEffect(() => {
