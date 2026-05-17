@@ -38,7 +38,7 @@ function HospitalAdmin() {
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="font-display text-xl font-semibold">{h.name}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">{h.rating} ★ · ID {h.id.toUpperCase()}</div>
+                     <div className="mt-1 text-xs text-muted-foreground">{h.rating} ★ · ID {(h.id || "").toUpperCase()}</div>
                   </div>
                   <div className={`rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${
                     incoming > 0 ? "border-emergency/50 bg-emergency/10 text-emergency" : "border-success/40 bg-success/10 text-success"

@@ -116,7 +116,7 @@ function TrackingPage() {
                     <Stat label="ICU beds" value={String(active.hospital.icuBeds)} />
                     <Stat label="ER beds" value={String(active.hospital.emergencyBeds)} />
                     <Stat label="Rating" value={`${active.hospital.rating} ★`} />
-                    <Stat label="ID" value={active.hospital.id.toUpperCase()} />
+                     <Stat label="ID" value={(active.hospital.id || "").toUpperCase()} />
                   </div>
                 </motion.div>
               )}
