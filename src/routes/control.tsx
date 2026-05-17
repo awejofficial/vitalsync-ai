@@ -23,7 +23,7 @@ function ControlCenter() {
 
   // Flatten logs across all cases
   const allLogs = list
-    .flatMap((c) => c.agentLog.map((l) => ({ ...l, caseId: c.id, patient: c.patient.name })))
+    .flatMap((c) => (Array.isArray(c.agentLog) ? c.agentLog : []).map((l) => ({ ...l, caseId: c.id, patient: c.patient.name })))
     .sort((a, b) => b.ts - a.ts)
     .slice(0, 80);
 

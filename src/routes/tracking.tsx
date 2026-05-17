@@ -138,7 +138,7 @@ function TrackingPage() {
                 <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Agent log</div>
                 <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
                   <AnimatePresence initial={false}>
-                    {active.agentLog.slice().reverse().map((l) => (
+                    {(Array.isArray(active.agentLog) ? active.agentLog : []).slice().reverse().map((l) => (
                       <motion.div
                         key={l.ts + l.message}
                         layout
